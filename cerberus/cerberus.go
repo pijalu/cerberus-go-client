@@ -99,6 +99,13 @@ func (c *Client) Metadata() *Metadata {
 	}
 }
 
+// SecureFile returns the SecureFile client
+func (c *Client) SecureFile() *SecureFile {
+	return &SecureFile{
+		c: c,
+	}
+}
+
 // ErrorBodyNotReturned is an error indicating that the server did not return error details (in case of a non-successful status).
 // This likely means that there is some sort of server error that is occurring
 var ErrorBodyNotReturned = fmt.Errorf("No error body returned from server")
@@ -161,10 +168,7 @@ func (c *Client) DoRequest(method, path string, params map[string]string, data i
 // json.Marshal in that you pass a pointer to the function.
 func parseResponse(r io.Reader, parseTo interface{}) error {
 	// Decode the body into the provided interface
-	if err := json.NewDecoder(r).Decode(parseTo); err != nil {
-		return err
-	}
-	return nil
+	return json.NewDecoder(r).Decode(parseTo)
 }
 
 // handleAPIError is a helper for parsing an error response body from the API.
