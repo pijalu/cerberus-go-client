@@ -17,8 +17,16 @@ limitations under the License.
 package cerberus
 
 import (
+	"bytes"
+	"errors"
 	"fmt"
+	"io"
+	"mime"
+	"mime/multipart"
 	"net/http"
+	"os"
+	"path"
+	"path/filepath"
 
 	"github.com/Nike-Inc/cerberus-go-client/api"
 )
@@ -38,7 +46,8 @@ func (r *SecureFile) List() (*api.SecureFilesResponse, error) {
 		return nil, fmt.Errorf("error while trying to get secure files: %v", err)
 	}
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("error while trying to list secure f. Got HTTP status code %d", resp.StatusCode)
+		return nil, fmt.Errorf("error while trying to list secure files. Got HTTP status code %d",
+			resp.StatusCode)
 	}
 	sfr := &api.SecureFilesResponse{}
 	err = parseResponse(resp.Body, sfr)
@@ -46,4 +55,109 @@ func (r *SecureFile) List() (*api.SecureFilesResponse, error) {
 		return nil, err
 	}
 	return sfr, nil
+}
+
+// Get downloads a secure file under localfile. File will be saved under localpath
+func (r *SecureFile) Get(secureFilePath string, localpath string) error {
+	resp, err := r.c.DoRequest(http.MethodGet,
+		path.Join(secureFileBasePath, secureFilePath),
+		map[string]string{},
+		nil)
+	if err != nil {
+		return fmt.Errorf("error while downloading secure file: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("error while trying to download secure file %s. Got HTTP status code %d",
+			secureFilePath,
+			resp.StatusCode)
+	}
+
+	// Get filename
+	contentDisposition := resp.Header.Get("Content-Disposition")
+	_, dispositionParams, err := mime.ParseMediaType(contentDisposition)
+	if err != nil {
+		return fmt.Errorf("error parsing secure file header: %v", err)
+	}
+
+	localfile, present := dispositionParams["filename"]
+	if !present {
+		return errors.New("no filename present in securefile header")
+	}
+
+	// create output
+	out, err := os.Create(filepath.Join(localpath, localfile))
+	if err != nil {
+		return fmt.Errorf("error creating localfile %s: %v",
+			localfile,
+			err)
+	}
+	defer out.Close()
+
+	// Copy
+	_, err = io.Copy(out, resp.Body)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// getUploadFileBodyWriter create a reader containing an encoded multipart file. It returns a reader, a content-type and/or possible error
+func getUploadFileBodyWriter(localfile string) (io.Reader, string, error) {
+	file, err := os.Open(localfile)
+	if err != nil {
+		return nil, "", err
+	}
+	defer file.Close()
+
+	// Create mpart
+	var b bytes.Buffer
+	w := multipart.NewWriter(&b)
+	filename := filepath.Base(localfile)
+	part, err := w.CreateFormFile("file-content", filename)
+	if err != nil {
+		return nil, "", err
+	}
+	// Copy file
+	if _, err := io.Copy(part, file); err != nil {
+		return nil, "", err
+	}
+
+	// save content type of the body
+	contentType := w.FormDataContentType()
+
+	// close to flush mpart
+	if err := w.Close(); err != nil {
+		return nil, "", err
+	}
+
+	return &b, contentType, nil
+}
+
+// Put uploads a secure file to a given location localfile
+func (r *SecureFile) Put(secureFilePath string, localfile string) error {
+	body, contentType, err := getUploadFileBodyWriter(localfile)
+	if err != nil {
+		return fmt.Errorf("error creating upload body for %s file: %v", localfile, err)
+	}
+
+	resp, err := r.c.DoRequestWithBody(http.MethodGet,
+		path.Join(secureFileBasePath, secureFilePath),
+		map[string]string{},
+		contentType,
+		body)
+	if err != nil {
+		return fmt.Errorf("error while downloading secure file: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusNoContent {
+		return fmt.Errorf("error while trying to download secure file %s. Got HTTP status code %d",
+			secureFilePath,
+			resp.StatusCode)
+	}
+
+	return nil
 }

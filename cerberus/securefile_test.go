@@ -17,8 +17,12 @@ limitations under the License.
 package cerberus
 
 import (
+	"fmt"
+	"io/ioutil"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -68,6 +72,29 @@ var expectedResponse = &api.SecureFilesResponse{
 	},
 }
 
+func withBinaryTestServer(returnCode int, expectedPath, expectedMethod, filename string, body []byte, f func(ts *httptest.Server)) func() {
+	return func() {
+		Convey("http requests should be correct", func(c C) {
+			ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				c.So(r.Method, ShouldEqual, expectedMethod)
+				c.So(r.URL.Path, ShouldStartWith, expectedPath)
+				w.Header().Set("Content-Type", "application/octet-stream")
+				w.Header().Set("Content-Disposition",
+					fmt.Sprintf(`attachment; filename="%s"`,
+						filename))
+
+				w.WriteHeader(returnCode)
+				w.Write(body)
+			}))
+			f(ts)
+			Reset(func() {
+				ts.Close()
+			})
+		})
+
+	}
+}
+
 func TestSecureFileList(t *testing.T) {
 	Convey("A valid call to List", t, WithTestServer(http.StatusOK, "/v1/secure-files", http.MethodGet, secureFileListReply, func(ts *httptest.Server) {
 		cl, _ := NewClient(GenerateMockAuth(ts.URL, "a-cool-token", false, false), nil)
@@ -96,6 +123,55 @@ func TestSecureFileList(t *testing.T) {
 			files, err := cl.SecureFile().List()
 			So(err, ShouldNotBeNil)
 			So(files, ShouldBeNil)
+		})
+	})
+}
+
+func TestSecureFileGet(t *testing.T) {
+	tempdir, err := ioutil.TempDir("", "testing")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(tempdir)
+
+	Convey("A valid call to download", t, withBinaryTestServer(http.StatusOK,
+		"/v1/secure-file/test/file/hello.txt",
+		http.MethodGet,
+		"hello.txt",
+		[]byte("hello world"),
+		func(ts *httptest.Server) {
+			cl, _ := NewClient(GenerateMockAuth(ts.URL, "a-cool-token", false, false), nil)
+			So(cl, ShouldNotBeNil)
+			Convey("Should return a valid file", func() {
+				err := cl.SecureFile().Get("/test/file/hello.txt", tempdir)
+				So(err, ShouldBeNil)
+
+				actual, err := ioutil.ReadFile(filepath.Join(tempdir, "hello.txt"))
+				So(err, ShouldBeNil)
+				So(actual, ShouldResemble, []byte("hello world"))
+			})
+		}))
+
+	Convey("An invalid call to download", t, withBinaryTestServer(http.StatusInternalServerError,
+		"/v1/secure-file/test/file/hello.txt",
+		http.MethodGet,
+		"hello.txt",
+		[]byte("hello world"),
+		func(ts *httptest.Server) {
+			cl, _ := NewClient(GenerateMockAuth(ts.URL, "a-cool-token", false, false), nil)
+			So(cl, ShouldNotBeNil)
+			Convey("Should return a valid file", func() {
+				err := cl.SecureFile().Get("/test/file/hello.txt", tempdir)
+				So(err, ShouldNotBeNil)
+			})
+		}))
+
+	Convey("A download to a non-responsive server", t, func() {
+		cl, _ := NewClient(GenerateMockAuth("http://127.0.0.1:32876", "a-cool-token", false, false), nil)
+		So(cl, ShouldNotBeNil)
+		Convey("Should return an error", func() {
+			err := cl.SecureFile().Get("/test/file/hello.txt", tempdir)
+			So(err, ShouldNotBeNil)
 		})
 	})
 }
