@@ -40,8 +40,11 @@ var secureFileBasePath = "/v1/secure-file"
 var secureFileListBasePath = "/v1/secure-files"
 
 // List returns a list of secure files
-func (r *SecureFile) List() (*api.SecureFilesResponse, error) {
-	resp, err := r.c.DoRequest(http.MethodGet, secureFileListBasePath, map[string]string{}, nil)
+func (r *SecureFile) List(rootpath string) (*api.SecureFilesResponse, error) {
+	resp, err := r.c.DoRequest(http.MethodGet,
+		path.Join(secureFileListBasePath, rootpath),
+		map[string]string{},
+		nil)
 	if err != nil {
 		return nil, fmt.Errorf("error while trying to get secure files: %v", err)
 	}

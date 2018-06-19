@@ -96,21 +96,21 @@ func withBinaryTestServer(returnCode int, expectedPath, expectedMethod, filename
 }
 
 func TestSecureFileList(t *testing.T) {
-	Convey("A valid call to List", t, WithTestServer(http.StatusOK, "/v1/secure-files", http.MethodGet, secureFileListReply, func(ts *httptest.Server) {
+	Convey("A valid call to List", t, WithTestServer(http.StatusOK, "/v1/secure-files/my/sdb", http.MethodGet, secureFileListReply, func(ts *httptest.Server) {
 		cl, _ := NewClient(GenerateMockAuth(ts.URL, "a-cool-token", false, false), nil)
 		So(cl, ShouldNotBeNil)
 		Convey("Should return a valid list of categories", func() {
-			files, err := cl.SecureFile().List()
+			files, err := cl.SecureFile().List("my/sdb")
 			So(err, ShouldBeNil)
 			So(files, ShouldResemble, expectedResponse)
 		})
 	}))
 
-	Convey("An invalid call to List", t, WithTestServer(http.StatusInternalServerError, "/v1/secure-files", http.MethodGet, "", func(ts *httptest.Server) {
+	Convey("An invalid call to List", t, WithTestServer(http.StatusInternalServerError, "/v1/secure-files/my/sdb", http.MethodGet, "", func(ts *httptest.Server) {
 		cl, _ := NewClient(GenerateMockAuth(ts.URL, "a-cool-token", false, false), nil)
 		So(cl, ShouldNotBeNil)
 		Convey("Should error", func() {
-			files, err := cl.SecureFile().List()
+			files, err := cl.SecureFile().List("my/sdb")
 			So(err, ShouldNotBeNil)
 			So(files, ShouldBeNil)
 		})
@@ -120,7 +120,7 @@ func TestSecureFileList(t *testing.T) {
 		cl, _ := NewClient(GenerateMockAuth("http://127.0.0.1:32876", "a-cool-token", false, false), nil)
 		So(cl, ShouldNotBeNil)
 		Convey("Should return an error", func() {
-			files, err := cl.SecureFile().List()
+			files, err := cl.SecureFile().List("my/sdb")
 			So(err, ShouldNotBeNil)
 			So(files, ShouldBeNil)
 		})
