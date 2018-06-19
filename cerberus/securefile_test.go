@@ -175,3 +175,65 @@ func TestSecureFileGet(t *testing.T) {
 		})
 	})
 }
+
+// createTestFile creates a (temp) file with given content. It return the file name and/or error
+func createTestFile(content []byte) (string, error) {
+	// Create tempfile
+	f, err := ioutil.TempFile("", "test")
+	if err != nil {
+		return "", err
+	}
+	defer f.Close()
+
+	if _, err := f.Write(content); err != nil {
+		return "", err
+	}
+
+	return f.Name(), nil
+}
+
+func TestSecureFilePut(t *testing.T) {
+	expectedContent := "hello world"
+	filename, err := createTestFile([]byte(expectedContent))
+	if err != nil {
+		t.Fatalf("Error creating temp file: %v", err)
+	}
+	defer os.Remove(filename)
+
+	Convey("A valid call to put", t, withBinaryTestServer(http.StatusNoContent,
+		"/v1/secure-file/test/file/hello.txt",
+		http.MethodPost,
+		"hello.txt",
+		[]byte(expectedContent),
+		func(ts *httptest.Server) {
+			cl, _ := NewClient(GenerateMockAuth(ts.URL, "a-cool-token", false, false), nil)
+			So(cl, ShouldNotBeNil)
+			Convey("Should return a valid file", func() {
+				err := cl.SecureFile().Put("/test/file/hello.txt", filename)
+				So(err, ShouldBeNil)
+			})
+		}))
+
+	Convey("An invalid call to put", t, withBinaryTestServer(http.StatusInternalServerError,
+		"/v1/secure-file/test/file/hello.txt",
+		http.MethodPost,
+		"hello.txt",
+		[]byte(expectedContent),
+		func(ts *httptest.Server) {
+			cl, _ := NewClient(GenerateMockAuth(ts.URL, "a-cool-token", false, false), nil)
+			So(cl, ShouldNotBeNil)
+			Convey("Should return a valid file", func() {
+				err := cl.SecureFile().Put("/test/file/hello.txt", filename)
+				So(err, ShouldNotBeNil)
+			})
+		}))
+
+	Convey("A put to a non-responsive server", t, func() {
+		cl, _ := NewClient(GenerateMockAuth("http://127.0.0.1:32876", "a-cool-token", false, false), nil)
+		So(cl, ShouldNotBeNil)
+		Convey("Should return an error", func() {
+			err := cl.SecureFile().Put("/test/file/hello.txt", filename)
+			So(err, ShouldNotBeNil)
+		})
+	})
+}

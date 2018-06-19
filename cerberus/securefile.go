@@ -138,12 +138,14 @@ func getUploadFileBodyWriter(localfile string) (io.Reader, string, error) {
 
 // Put uploads a secure file to a given location localfile
 func (r *SecureFile) Put(secureFilePath string, localfile string) error {
+	// Create multipart body and content type
 	body, contentType, err := getUploadFileBodyWriter(localfile)
 	if err != nil {
 		return fmt.Errorf("error creating upload body for %s file: %v", localfile, err)
 	}
 
-	resp, err := r.c.DoRequestWithBody(http.MethodGet,
+	// Send request
+	resp, err := r.c.DoRequestWithBody(http.MethodPost,
 		path.Join(secureFileBasePath, secureFilePath),
 		map[string]string{},
 		contentType,
@@ -153,6 +155,7 @@ func (r *SecureFile) Put(secureFilePath string, localfile string) error {
 	}
 	defer resp.Body.Close()
 
+	// expected sucess reply is "no content"
 	if resp.StatusCode != http.StatusNoContent {
 		return fmt.Errorf("error while trying to download secure file %s. Got HTTP status code %d",
 			secureFilePath,
